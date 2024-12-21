@@ -264,7 +264,7 @@ namespace Unet.EventDrivenChat
                 // 先在本地處理消息
                 messageHandlerRegistry.HandleMessage(message);
 
-                // 如果是主機，則廣播給所有客戶端
+                // 如果是主機，則廣播給所���客戶端
                 if (isHost)
                 {
                     Debug.Log("[BroadcastMessage] 主機廣播給所有客戶端");
