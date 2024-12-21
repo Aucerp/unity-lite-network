@@ -1,0 +1,26 @@
+# 頂層 EditorConfig 文件
+root = true
+
+# 所有文件都使用 UTF-8 編碼
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# 文件特定設置
+[*.cs]
+charset = utf-8-bom
+indent_style = space
+indent_size = 4
+
+# Unity 場景和預製件文件
+[*.{unity,prefab,asset,meta}]
+charset = utf-8
+end_of_line = lf
+
+# 配置文件
+[*.{json,xml,yaml,yml}]
+charset = utf-8
+indent_style = space
+indent_size = 2 
