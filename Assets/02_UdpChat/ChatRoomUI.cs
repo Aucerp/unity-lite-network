@@ -49,6 +49,9 @@ namespace Unet.LitUdp.Chat
 
         void OnGUI()
         {
+            // 添加調試信息
+            GUI.Label(new Rect(10, 10, 200, 20), $"房間狀態: {(isInRoom ? "在房間中" : "未在房間中")}");
+            
             if (!isInRoom)
             {
                 DrawLoginWindow();
@@ -133,7 +136,7 @@ namespace Unet.LitUdp.Chat
             {
                 GUILayout.BeginHorizontal();
 
-                // 左側聊天區域
+                // 左側聊天��域
                 DrawChatArea();
 
                 // 右側用戶列表
@@ -205,13 +208,43 @@ namespace Unet.LitUdp.Chat
                     foreach (string user in userList.ToList())
                     {
                         bool isSelected = user == selectedUser;
-                        GUI.color = isSelected ? Color.cyan : Color.white;
+                        bool isSelf = user == chatManager.UserName;
+                        bool isHost = user == chatManager.hostName;  // 檢查是否為主機
+
+                        // 設置顯示顏色
+                        if (isSelf)
+                        {
+                            GUI.color = Color.gray;  // 自己顯示為灰色
+                        }
+                        else if (isHost)
+                        {
+                            GUI.color = Color.yellow;  // 主機顯示為黃色
+                        }
+                        else
+                        {
+                            GUI.color = isSelected ? Color.cyan : Color.white;  // 其他用戶
+                        }
+
+                        // 組合顯示文本
+                        string displayName = user;
+                        if (isSelf)
+                        {
+                            displayName += " (我)";
+                        }
+                        if (isHost)
+                        {
+                            displayName += " [房主]";
+                        }
 
                         // 使用固定寬度的按鈕
-                        if (GUILayout.Button(user, GUILayout.Width(110)))
+                        if (GUILayout.Button(displayName, GUILayout.Width(110)))
                         {
-                            selectedUser = isSelected ? string.Empty : user;
-                            Debug.Log($"選擇用戶: {selectedUser}");
+                            // 只有點擊其他用戶時才更新選擇
+                            if (!isSelf)
+                            {
+                                selectedUser = isSelected ? string.Empty : user;
+                                Debug.Log($"選擇用戶: {selectedUser}");
+                            }
                         }
                     }
                 }
@@ -220,7 +253,7 @@ namespace Unet.LitUdp.Chat
                     GUILayout.Label("沒有在線用戶");
                 }
 
-                GUI.color = Color.white;
+                GUI.color = Color.white;  // 重置顏色
                 GUILayout.EndScrollView();
                 GUILayout.EndVertical();
             }
@@ -233,6 +266,13 @@ namespace Unet.LitUdp.Chat
         private void SendMessage()
         {
             if (string.IsNullOrEmpty(inputMessage)) return;
+
+            // 檢查是否試圖私聊自己
+            if (!string.IsNullOrEmpty(selectedUser) && selectedUser == chatManager.UserName)
+            {
+                AddToLog("錯誤: 不能私聊自己");
+                return;
+            }
 
             if (string.IsNullOrEmpty(selectedUser))
             {
@@ -248,7 +288,20 @@ namespace Unet.LitUdp.Chat
 
         private void HandleChatMessage(ChatMessage message)
         {
-            string prefix = message.Type == MessageType.Private ? "[私聊]" : "";
+            string prefix = "";
+            if (message.Type == MessageType.Private)
+            {
+                // 根據發送者和接收者來決定顯示格式
+                if (message.FromName == chatManager.UserName)
+                {
+                    prefix = $"[私聊給 {message.ToName}]";
+                }
+                else
+                {
+                    prefix = $"[來自 {message.FromName} 的私聊]";
+                }
+            }
+
             string log = string.Format("[{0}] {1}{2}: {3}",
                 System.DateTime.Now.ToString("HH:mm:ss"),
                 prefix,
@@ -278,12 +331,21 @@ namespace Unet.LitUdp.Chat
         {
             try
             {
-                Debug.Log($"開始更新用戶列表 UI，用戶數: {users.Count}，用戶: {string.Join(", ", users)}");
+                Debug.Log($"[用戶列表] 開始更新用戶列表 UI，用戶數: {users.Count}，用戶: {string.Join(", ", users)}");
                 
-                // 保存用戶列表，即使還沒進入房間
+                // 保存用戶列表
                 userList = new List<string>(users);
                 
-                Debug.Log($"用戶列表更新完成，當前列表: {string.Join(", ", userList)}");
+                // 如果選中的用戶不在列表中，清除選擇
+                if (!string.IsNullOrEmpty(selectedUser) && !users.Contains(selectedUser))
+                {
+                    selectedUser = string.Empty;
+                }
+                
+                Debug.Log($"[用戶列表] 更新完成，當前列表: {string.Join(", ", userList)}");
+                
+                // 強制重繪 UI
+                Repaint();
             }
             catch (Exception ex)
             {
@@ -308,6 +370,8 @@ namespace Unet.LitUdp.Chat
         {
             try
             {
+                Debug.Log($"[房間狀態] 處理房間狀態變更 - success: {success}, 當前是否在房間中: {isInRoom}");
+                
                 if (success)
                 {
                     Debug.Log("開始處理房間加入成功事件");
@@ -342,15 +406,23 @@ namespace Unet.LitUdp.Chat
                 }
                 else
                 {
-                    Debug.Log("房間加入失敗");
+                    Debug.Log("[房間狀態] 房間關閉或加入失敗，準備清理資源");
+                    LeaveRoom();  // 使用 LeaveRoom 來處理清理工作
+                    
+                    // 強制更新 UI 狀態
                     isInRoom = false;
-                    AddToLog("加入聊天室失敗");
+                    
+                    // 添加提示消息
+                    AddToLog(chatManager.IsHost ? "房間已關閉" : "主機已關閉房間");
+                    
+                    // 強制重繪 UI
+                    Repaint();
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"處理房間加入事件時發生錯誤: {ex}");
-                isInRoom = false;
+                LeaveRoom();
             }
         }
 
@@ -410,6 +482,8 @@ namespace Unet.LitUdp.Chat
 
         private void LeaveRoom()
         {
+            Debug.Log("[離開房間] 開始執行離開房間流程");
+            
             if (chatManager != null)
             {
                 chatManager.LeaveChat();
@@ -422,14 +496,25 @@ namespace Unet.LitUdp.Chat
             inputMessage = string.Empty;
             selectedUser = string.Empty;
             scrollPosition = Vector2.zero;
+            
+            // 添加離開提示
+            AddToLog("已離開聊天室");
+            
+            // 強制重繪 UI
+            Repaint();
+            
+            Debug.Log("[離開房間] 離開房間流程完成");
         }
 
         private void Repaint()
         {
-            // 強制在下一幀��繪 UI
+            // 強制在下一幀重繪 UI
             if (Thread.CurrentThread.IsBackground)
             {
-                UnityMainThreadDispatcher.Instance.Enqueue(() => { });
+                UnityMainThreadDispatcher.Instance.Enqueue(() => 
+                {
+                    Debug.Log("[UI] 強制重繪 UI");
+                });
             }
         }
     }
